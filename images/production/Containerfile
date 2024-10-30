@@ -3,13 +3,19 @@ ARG PYTHON_VERSION=3.11.6
 ARG DEBIAN_BASE=bookworm
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_BASE} AS base
 
-# Add frappe user and update system packages
+ARG WKHTMLTOPDF_VERSION=0.12.6.1-3
+ARG WKHTMLTOPDF_DISTRO=bookworm
+ARG NODE_VERSION=18.18.2
+ENV NVM_DIR=/home/frappe/.nvm
+ENV PATH=${NVM_DIR}/versions/node/v${NODE_VERSION}/bin/:${PATH}
+
+# Add frappe user
 RUN useradd -ms /bin/bash frappe
 
 # Update package list
 RUN apt-get update
 
-# Install essential packages
+# Install essential packages in separate steps to identify issues
 RUN apt-get install --no-install-recommends -y curl
 RUN apt-get install --no-install-recommends -y git
 RUN apt-get install --no-install-recommends -y vim
@@ -22,28 +28,17 @@ RUN apt-get install --no-install-recommends -y libpangoft2-1.0-0
 RUN apt-get install --no-install-recommends -y libpangocairo-1.0-0
 RUN apt-get install --no-install-recommends -y restic
 RUN apt-get install --no-install-recommends -y gpg
-RUN apt-get install --no-install-recommends -y default-mysql-client  
+RUN apt-get install --no-install-recommends -y default-mysql-client  # Updated line
 RUN apt-get install --no-install-recommends -y less
 RUN apt-get install --no-install-recommends -y libpq-dev
 RUN apt-get install --no-install-recommends -y postgresql-client
 RUN apt-get install --no-install-recommends -y wait-for-it
 RUN apt-get install --no-install-recommends -y jq
 
-
-# Install and configure NodeJS using NVM
-RUN mkdir -p ${NVM_DIR} && \
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash && \
-    . ${NVM_DIR}/nvm.sh && \
-    nvm install ${NODE_VERSION} && \
-    nvm use v${NODE_VERSION} && \
-    npm install -g yarn && \
-    nvm alias default v${NODE_VERSION} && \
-    rm -rf ${NVM_DIR}/.cache
-
-# Configure bashrc for nvm
-RUN echo 'export NVM_DIR="/home/frappe/.nvm"' >>/home/frappe/.bashrc && \
-    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >>/home/frappe/.bashrc && \
-    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >>/home/frappe/.bashrc
+# Install Node.js and Yarn directly without nvm
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g yarn
 
 # Install wkhtmltopdf with patched qt
 RUN if [ "$(uname -m)" = "aarch64" ]; then export ARCH=arm64; fi && \
@@ -66,11 +61,10 @@ RUN rm -rf /var/lib/apt/lists/* && \
     chown -R frappe:frappe /var/lib/nginx && \
     chown -R frappe:frappe /run/nginx.pid
 
-
 COPY resources/nginx-template.conf /templates/nginx/frappe.conf.template
 COPY resources/nginx-entrypoint.sh /usr/local/bin/nginx-entrypoint.sh
 
-# Continue with other stages
+# Other stages for build and setting up ERPNext
 FROM base AS build
 
 RUN apt-get update && \
