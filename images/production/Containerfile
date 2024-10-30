@@ -1,3 +1,4 @@
+# Base setup
 ARG PYTHON_VERSION=3.11.6
 ARG DEBIAN_BASE=bookworm
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_BASE} AS base
@@ -25,10 +26,10 @@ RUN useradd -ms /bin/bash frappe \
     # For backups
     restic \
     gpg \
-    # MariaDB
-    mariadb-client \
+    # MySQL client for database access
+    mysql-client \
     less \
-    # Postgres
+    # Postgres (if needed for other services)
     libpq-dev \
     postgresql-client \
     # For healthcheck
@@ -74,15 +75,9 @@ FROM base AS build
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
-    # For frappe framework
     wget \
-    # For psycopg2
-    libpq-dev \
-    # Other
     libffi-dev \
     liblcms2-dev \
-    libldap2-dev \
-    libmariadb-dev \
     libsasl2-dev \
     libtiff5-dev \
     libwebp-dev \
@@ -90,7 +85,6 @@ RUN apt-get update \
     rlwrap \
     tk8.6-dev \
     cron \
-    # For pandas
     gcc \
     build-essential \
     libbz2-dev \
@@ -98,6 +92,7 @@ RUN apt-get update \
 
 USER frappe
 
+# Fetch Frappe and ERPNext source code
 FROM build AS builder
 
 ARG FRAPPE_BRANCH=version-15
@@ -117,11 +112,33 @@ RUN bench init \
   echo "{}" > sites/common_site_config.json && \
   find apps -mindepth 1 -path "*/.git" | xargs rm -fr
 
+# Create and configure ERPNext site
+ENV SITE_NAME=grierpnext.local
+ENV DB_NAME=grierpnext
+ENV DB_PASSWORD=oUtuSgbsRrHGYO4!
+ENV DB_HOST=grierpnextdb.mysql.database.azure.com
+ENV DB_PORT=3306
+ENV REDIS_CACHE=redis://grierp-redis.redis.cache.windows.net:6379
+ENV REDIS_QUEUE=redis://grierp-redis.redis.cache.windows.net:6379
+ENV REDIS_SOCKETIO=redis://grierp-redis.redis.cache.windows.net:6379
+
+RUN cd /home/frappe/frappe-bench && \
+    bench new-site $SITE_NAME \
+    --db-name $DB_NAME \
+    --db-password $DB_PASSWORD \
+    --admin-password admin \
+    --mariadb-root-password $DB_PASSWORD && \
+    # Update site_config.json with database and Redis configurations
+    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json db_type "mysql" && \
+    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json db_host "$DB_HOST" && \
+    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json db_port "$DB_PORT" && \
+    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json redis_cache "$REDIS_CACHE" && \
+    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json redis_queue "$REDIS_QUEUE" && \
+    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json redis_socketio "$REDIS_SOCKETIO"
+
 FROM base AS erpnext
 
 USER frappe
-
-RUN echo "echo \"Commands restricted in prodution container, Read FAQ before you proceed: https://frappe.fyi/ctr-faq\"" >> ~/.bashrc
 
 COPY --from=builder --chown=frappe:frappe /home/frappe/frappe-bench /home/frappe/frappe-bench
 
