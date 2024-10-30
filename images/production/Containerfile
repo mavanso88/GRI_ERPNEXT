@@ -3,19 +3,13 @@ ARG PYTHON_VERSION=3.11.6
 ARG DEBIAN_BASE=bookworm
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_BASE} AS base
 
-ARG WKHTMLTOPDF_VERSION=0.12.6.1-3
-ARG WKHTMLTOPDF_DISTRO=bookworm
-ARG NODE_VERSION=18.18.2
-ENV NVM_DIR=/home/frappe/.nvm
-ENV PATH=${NVM_DIR}/versions/node/v${NODE_VERSION}/bin/:${PATH}
-
-# Add frappe user
+# Add frappe user and update system packages
 RUN useradd -ms /bin/bash frappe
 
 # Update package list
 RUN apt-get update
 
-# Install essential packages in separate steps to identify issues
+# Install essential packages
 RUN apt-get install --no-install-recommends -y curl
 RUN apt-get install --no-install-recommends -y git
 RUN apt-get install --no-install-recommends -y vim
@@ -28,12 +22,13 @@ RUN apt-get install --no-install-recommends -y libpangoft2-1.0-0
 RUN apt-get install --no-install-recommends -y libpangocairo-1.0-0
 RUN apt-get install --no-install-recommends -y restic
 RUN apt-get install --no-install-recommends -y gpg
-RUN apt-get install --no-install-recommends -y mysql-client
+RUN apt-get install --no-install-recommends -y default-mysql-client  
 RUN apt-get install --no-install-recommends -y less
 RUN apt-get install --no-install-recommends -y libpq-dev
 RUN apt-get install --no-install-recommends -y postgresql-client
 RUN apt-get install --no-install-recommends -y wait-for-it
 RUN apt-get install --no-install-recommends -y jq
+
 
 # Install and configure NodeJS using NVM
 RUN mkdir -p ${NVM_DIR} && \
