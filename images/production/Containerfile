@@ -9,35 +9,34 @@ ARG NODE_VERSION=18.18.2
 ENV NVM_DIR=/home/frappe/.nvm
 ENV PATH=${NVM_DIR}/versions/node/v${NODE_VERSION}/bin/:${PATH}
 
-# Add frappe user and update system packages
-RUN useradd -ms /bin/bash frappe && \
-    apt-get update && \
-    apt-get install --no-install-recommends -y \
-    curl \
-    git \
-    vim \
-    nginx \
-    gettext-base \
-    file \
-    # weasyprint dependencies
-    libpango-1.0-0 \
-    libharfbuzz0b \
-    libpangoft2-1.0-0 \
-    libpangocairo-1.0-0 \
-    # For backups
-    restic \
-    gpg \
-    # MySQL client for database access
-    mysql-client \
-    less \
-    # Postgres (if needed for other services)
-    libpq-dev \
-    postgresql-client \
-    # For healthcheck
-    wait-for-it \
-    jq \
-    # NodeJS (using nvm)
-    && mkdir -p ${NVM_DIR} && \
+# Add frappe user
+RUN useradd -ms /bin/bash frappe
+
+# Update package list
+RUN apt-get update
+
+# Install essential packages in separate steps to identify issues
+RUN apt-get install --no-install-recommends -y curl
+RUN apt-get install --no-install-recommends -y git
+RUN apt-get install --no-install-recommends -y vim
+RUN apt-get install --no-install-recommends -y nginx
+RUN apt-get install --no-install-recommends -y gettext-base
+RUN apt-get install --no-install-recommends -y file
+RUN apt-get install --no-install-recommends -y libpango-1.0-0
+RUN apt-get install --no-install-recommends -y libharfbuzz0b
+RUN apt-get install --no-install-recommends -y libpangoft2-1.0-0
+RUN apt-get install --no-install-recommends -y libpangocairo-1.0-0
+RUN apt-get install --no-install-recommends -y restic
+RUN apt-get install --no-install-recommends -y gpg
+RUN apt-get install --no-install-recommends -y mysql-client
+RUN apt-get install --no-install-recommends -y less
+RUN apt-get install --no-install-recommends -y libpq-dev
+RUN apt-get install --no-install-recommends -y postgresql-client
+RUN apt-get install --no-install-recommends -y wait-for-it
+RUN apt-get install --no-install-recommends -y jq
+
+# Install and configure NodeJS using NVM
+RUN mkdir -p ${NVM_DIR} && \
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash && \
     . ${NVM_DIR}/nvm.sh && \
     nvm install ${NODE_VERSION} && \
@@ -71,6 +70,7 @@ RUN rm -rf /var/lib/apt/lists/* && \
     chown -R frappe:frappe /var/log/nginx && \
     chown -R frappe:frappe /var/lib/nginx && \
     chown -R frappe:frappe /run/nginx.pid
+
 
 COPY resources/nginx-template.conf /templates/nginx/frappe.conf.template
 COPY resources/nginx-entrypoint.sh /usr/local/bin/nginx-entrypoint.sh
