@@ -15,25 +15,25 @@ RUN useradd -ms /bin/bash frappe
 # Update package list
 RUN apt-get update
 
-# Install essential packages in separate steps to identify issues
-RUN apt-get install --no-install-recommends -y curl
-RUN apt-get install --no-install-recommends -y git
-RUN apt-get install --no-install-recommends -y vim
-RUN apt-get install --no-install-recommends -y nginx
-RUN apt-get install --no-install-recommends -y gettext-base
-RUN apt-get install --no-install-recommends -y file
-RUN apt-get install --no-install-recommends -y libpango-1.0-0
-RUN apt-get install --no-install-recommends -y libharfbuzz0b
-RUN apt-get install --no-install-recommends -y libpangoft2-1.0-0
-RUN apt-get install --no-install-recommends -y libpangocairo-1.0-0
-RUN apt-get install --no-install-recommends -y restic
-RUN apt-get install --no-install-recommends -y gpg
-RUN apt-get install --no-install-recommends -y default-mysql-client  # Updated line
-RUN apt-get install --no-install-recommends -y less
-RUN apt-get install --no-install-recommends -y libpq-dev
-RUN apt-get install --no-install-recommends -y postgresql-client
-RUN apt-get install --no-install-recommends -y wait-for-it
-RUN apt-get install --no-install-recommends -y jq
+# Install essential packages
+RUN apt-get install --no-install-recommends -y curl \
+    git \
+    vim \
+    nginx \
+    gettext-base \
+    file \
+    libpango-1.0-0 \
+    libharfbuzz0b \
+    libpangoft2-1.0-0 \
+    libpangocairo-1.0-0 \
+    restic \
+    gpg \
+    default-mysql-client \
+    less \
+    libpq-dev \
+    postgresql-client \
+    wait-for-it \
+    jq
 
 # Install Node.js and Yarn directly without nvm
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
@@ -63,6 +63,10 @@ RUN rm -rf /var/lib/apt/lists/* && \
 
 COPY resources/nginx-template.conf /templates/nginx/frappe.conf.template
 COPY resources/nginx-entrypoint.sh /usr/local/bin/nginx-entrypoint.sh
+
+# Copy start.sh script to handle site creation at runtime
+COPY start.sh /home/frappe/start.sh
+RUN chmod +x /home/frappe/start.sh
 
 # Other stages for build and setting up ERPNext
 FROM base AS build
@@ -106,30 +110,6 @@ RUN bench init \
   echo "{}" > sites/common_site_config.json && \
   find apps -mindepth 1 -path "*/.git" | xargs rm -fr
 
-# Create and configure ERPNext site
-ENV SITE_NAME=grierpnext.local
-ENV DB_NAME=grierpnext
-ENV DB_PASSWORD=oUtuSgbsRrHGYO4!
-ENV DB_HOST=grierpnextdb.mysql.database.azure.com
-ENV DB_PORT=3306
-ENV REDIS_CACHE=redis://grierp-redis.redis.cache.windows.net:6379
-ENV REDIS_QUEUE=redis://grierp-redis.redis.cache.windows.net:6379
-ENV REDIS_SOCKETIO=redis://grierp-redis.redis.cache.windows.net:6379
-
-RUN cd /home/frappe/frappe-bench && \
-    bench new-site $SITE_NAME \
-    --db-name $DB_NAME \
-    --db-password $DB_PASSWORD \
-    --admin-password admin \
-    --mariadb-root-password $DB_PASSWORD && \
-    # Update site_config.json with database and Redis configurations
-    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json db_type "mysql" && \
-    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json db_host "$DB_HOST" && \
-    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json db_port "$DB_PORT" && \
-    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json redis_cache "$REDIS_CACHE" && \
-    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json redis_queue "$REDIS_QUEUE" && \
-    bench set-config -c /home/frappe/frappe-bench/sites/$SITE_NAME/site_config.json redis_socketio "$REDIS_SOCKETIO"
-
 FROM base AS erpnext
 
 USER frappe
@@ -143,6 +123,9 @@ VOLUME [ \
   "/home/frappe/frappe-bench/sites/assets", \
   "/home/frappe/frappe-bench/logs" \
 ]
+
+# Run start.sh as entrypoint to handle site creation
+ENTRYPOINT ["/home/frappe/start.sh"]
 
 CMD [ \
   "/home/frappe/frappe-bench/env/bin/gunicorn", \
